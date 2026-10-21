@@ -1,4 +1,4 @@
-"""CoverIQ product-matching demo using fictional customer data."""
+"""Streamlit demo for customer-permitted product matching."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import streamlit as st
 
 from chinedu_data import CUSTOMER, build_transactions
 from features import calculate_features, feature_rows
-from products import GOAL_LABELS, PRODUCTS
+from products import GOAL_LABELS
 from recommend import recommend
 from train_model import train_model
 
@@ -21,6 +21,18 @@ def get_model():
 
 
 STAGES = ["Why CoverIQ", "Before · Current journey", "After · CoverIQ"]
+ANALYSIS_STATE_KEYS = (
+    "coveriq_analysis_result",
+    "coveriq_analysis_features",
+    "coveriq_model_report",
+    "coveriq_analysis_signature",
+)
+
+
+def clear_analysis_state() -> None:
+    """Remove cached results when demo inputs change or consent is withdrawn."""
+    for key in ANALYSIS_STATE_KEYS:
+        st.session_state.pop(key, None)
 
 
 def reset_coveriq() -> None:
@@ -28,14 +40,7 @@ def reset_coveriq() -> None:
     st.session_state["coveriq_step"] = 0
     st.session_state["coveriq_opted_in"] = False
     st.session_state["coveriq_demo_consent"] = False
-    analysis_keys = (
-        "coveriq_analysis_result",
-        "coveriq_analysis_features",
-        "coveriq_model_report",
-        "coveriq_analysis_signature",
-    )
-    for key in analysis_keys:
-        st.session_state.pop(key, None)
+    clear_analysis_state()
 
 
 def intro_page() -> None:
@@ -51,16 +56,16 @@ def intro_page() -> None:
     with customer:
         with st.container(border=True):
             st.markdown("#### Customer value")
-        st.write(
-            "More relevant product information, a clear reason for the offer, "
-            "and a choice to opt in or decline."
-        )
+            st.write(
+                "More relevant product information, a clear reason for the offer, "
+                "and a choice to opt in or decline."
+            )
     with institution:
         with st.container(border=True):
             st.markdown("#### Potential business value")
             st.write(
                 "Test whether better timed, better qualified referrals improve customer response "
-                "and reduce irrelevant outreach. This is a hypothesis to measure, not a result we claim today."
+                "and reduce irrelevant outreach.
             )
     st.markdown("#### What CoverIQ does")
     st.write(
@@ -68,11 +73,12 @@ def intro_page() -> None:
         "positive cash flow may persist, applies safeguards, then returns a reasoned action."
     )
     st.info(
-        "This worked example uses My Smart Save from Prudential Zenith Life. Zenith General Insurance "
-        "is a separate insurer; a broader catalogue would need distinct signals and fit checks for each product."
+        "This worked example uses My Smart Save from Prudential Zenith Life. Zenith General "
+        "Insurance is a separate insurer; a broader catalogue would need distinct signals and "
+        "fit checks for each product."
     )
     st.caption(
-        "The challenge statement supports the problem framing. It does not prove Zenith’s current "
+        "The challenge statement supports the problem framing.  "
         "campaigns are untargeted or that CoverIQ improves conversion."
     )
 
@@ -81,7 +87,7 @@ def before_page() -> None:
     st.title("Before · Product discovery can be hard to navigate")
     st.warning(
         "The challenge identifies the risk of multiple, irrelevant, or excessive offers. "
-        "This is an illustrative baseline, not a verified copy of Zenith’s current process."
+       
     )
     step = st.session_state.setdefault("manual_step", 0)
     st.progress(
@@ -90,7 +96,9 @@ def before_page() -> None:
     )
     if step == 0:
         st.subheader("1 · An offer appears")
-        st.write("A customer may see a product message before knowing whether it fits their situation.")
+        st.write(
+            "A customer may see a product message before knowing whether it fits their situation."
+        )
         st.info("Customer question: “Why am I seeing this, and is it meant for me?”")
     elif step == 1:
         st.subheader("2 · The customer enters details")
@@ -106,7 +114,9 @@ def before_page() -> None:
         st.caption("These are fictional demo values, not confirmed application requirements.")
     elif step == 2:
         st.subheader("3 · The answers are customer-declared")
-        st.write("This illustration does not compare the answers with the customer’s account history.")
+        st.write(
+            "This illustration does not compare the answers with the customer’s account history."
+        )
         st.table(
             pd.DataFrame([
                 {"Signal": "Income", "Source here": "Customer-entered"},
@@ -128,11 +138,18 @@ def before_page() -> None:
             ],
             key="manual_outcome",
         )
-        st.write({
-            "Customer pauses after an income change": "The form does not monitor the fictional account after the customer enters answers.",
-            "Customer decides it is not a fit": "The customer has to recognize the mismatch and stop or seek another option.",
-            "Customer continues to separate review": "Continuing does not mean the policy is approved or purchased.",
-        }[outcome])
+        outcome_explanations = {
+            "Customer pauses after an income change": (
+                "The form does not monitor the fictional account after the customer enters answers."
+            ),
+            "Customer decides it is not a fit": (
+                "The customer has to recognize the mismatch and stop or seek another option."
+            ),
+            "Customer continues to separate review": (
+                "Continuing does not mean the policy is approved or purchased."
+            ),
+        }
+        st.write(outcome_explanations[outcome])
     left, right = st.columns(2)
     with left:
         if st.button("Back", disabled=step == 0, key="manual_back"):
@@ -162,8 +179,7 @@ def after_page() -> None:
         st.caption("Demo control only; no legal consent is recorded and no bank is connected.")
         if not consent:
             st.session_state["coveriq_opted_in"] = False
-            for key in ("coveriq_analysis_result", "coveriq_analysis_features", "coveriq_model_report"):
-                st.session_state.pop(key, None)
+            clear_analysis_state()
         if st.button("Continue", type="primary", disabled=not consent, key="coveriq_consent_next"):
             st.session_state["coveriq_opted_in"] = True
             st.session_state["coveriq_step"] = 1
@@ -187,14 +203,22 @@ def after_page() -> None:
                 st.session_state["coveriq_step"] = 0
                 st.rerun()
         with right:
-            if st.button("Review account history", type="primary", disabled=not goal_labels, key="coveriq_products_next"):
+            if st.button(
+                "Review account history",
+                type="primary",
+                disabled=not goal_labels,
+                key="coveriq_products_next",
+            ):
                 st.session_state["coveriq_selected_goals"] = goal_labels
                 st.session_state["coveriq_step"] = 2
                 st.rerun()
         return
 
     st.subheader("3 · Review the history and model evidence")
-    st.write("Explore 36 months of fictional account activity and compare a recent salary change with a sustained one.")
+    st.write(
+        "Explore 36 months of fictional account activity and compare a recent salary change "
+        "with a sustained one."
+    )
     months = st.segmented_control(
         "Time at the higher salary", options=[3, 9],
         format_func=lambda value: f"{value} months", default=3, key="coveriq_raise_timeline",
@@ -214,25 +238,48 @@ def after_page() -> None:
         alt="Fictional balance over 36 months.",
     )
     with st.expander("View monthly transaction summary"):
-        st.table(history, hide_index=True, alt="Monthly salary, other credits, debits, and balances for the fictional customer.")
+        st.table(
+            history,
+            hide_index=True,
+            alt="Monthly salary, other credits, debits, and balances for the fictional customer.",
+        )
     selected_goals = st.session_state.get("coveriq_selected_goals", ["Long-term savings"])
     st.caption("Customer-stated goals: " + ", ".join(selected_goals))
     signature = (months, tuple(sorted(selected_goals)))
     if st.session_state.get("coveriq_analysis_signature") != signature:
-        for key in ("coveriq_analysis_result", "coveriq_analysis_features", "coveriq_model_report"):
-            st.session_state.pop(key, None)
+        clear_analysis_state()
 
     if st.button("Run CoverIQ review", type="primary", width="stretch", key="coveriq_analyze"):
         with st.status("CoverIQ is reviewing the profile", expanded=True) as status:
             st.write("Checking the demo opt-in and loading the permitted fictional history.")
-            features = calculate_features(transactions, CUSTOMER["stated_goal"], CUSTOMER["opening_balance"])
-            st.write("Calculating salary stability, recent change, net cash flow, and balance trend.")
+            features = calculate_features(
+                transactions,
+                CUSTOMER["stated_goal"],
+                CUSTOMER["opening_balance"],
+            )
+            st.write(
+                "Calculating salary stability, recent change, net cash flow, and balance trend."
+            )
             st.write("Training a forward cash-flow model on separate synthetic customer profiles.")
             model, report = get_model()
-            st.write("Estimating whether monthly positive cash flow persists across at least five of six future months.")
-            result = recommend(features, model, st.session_state.get("coveriq_opted_in", False), selected_goals)
-            st.write("Applying timing safeguards and preparing a simulated response. No message is sent.")
-            status.update(label="Review complete · no message was sent", state="complete", expanded=True)
+            st.write(
+                "Estimating whether monthly positive cash flow persists across at least five of "
+                "six future months."
+            )
+            result = recommend(
+                features,
+                model,
+                st.session_state.get("coveriq_opted_in", False),
+                selected_goals,
+            )
+            st.write(
+                "Applying timing safeguards and preparing a simulated response. No message is sent."
+            )
+            status.update(
+                label="Review complete · no message was sent",
+                state="complete",
+                expanded=True,
+            )
         st.session_state["coveriq_analysis_signature"] = signature
         st.session_state["coveriq_analysis_result"] = result
         st.session_state["coveriq_analysis_features"] = features
@@ -252,7 +299,10 @@ def after_page() -> None:
         )
         st.markdown("#### CoverIQ action")
         st.write("Catalogue matches for the stated goal: " + ", ".join(result["products"]))
-        st.caption("Goal matching uses the customer's stated preference. The ML model forecasts cash-flow persistence and does not rank products.")
+        st.caption(
+            "Goal matching uses the customer's stated preference. The ML model forecasts cash-flow "
+            "persistence and does not rank products."
+        )
         if result["action"] == "recommend":
             st.success(result["message"])
         elif result["action"] == "wait":
@@ -266,14 +316,15 @@ def after_page() -> None:
                 f"{result['probability_surplus_persists']:.0%}",
             )
         st.caption(
-            "The model was trained and held-out-tested on generated profiles only. Its estimate is not "
-            "validated on real customers, calibrated confidence, affordability, or product eligibility."
+            "The model was trained and held-out-tested on generated profiles only. Its estimate is "
+            "not validated on real customers, calibrated confidence, affordability, or product eligibility."
         )
         with st.expander("How the model was evaluated"):
             report = st.session_state.get("coveriq_model_report", {})
             st.write(
                 f"Held-out synthetic profiles: {report.get('held_out_profiles', 0)} · "
-                f"ROC AUC {report.get('roc_auc', 0):.2f} · Accuracy {report.get('accuracy', 0):.2f} · "
+                f"ROC AUC {report.get('roc_auc', 0):.2f} · "
+                f"Accuracy {report.get('accuracy', 0):.2f} · "
                 f"Brier score {report.get('brier_score', 0):.2f}"
             )
             feature_names = {
@@ -286,12 +337,23 @@ def after_page() -> None:
                 "history_months": "History length",
             }
             importance_rows = [
-                {"Synthetic model feature": feature_names[name], "Relative importance": f"{score:.0%}"}
+                {
+                    "Synthetic model feature": feature_names[name],
+                    "Relative importance": f"{score:.0%}",
+                }
                 for name, score in list(report.get("feature_importance", {}).items())[:4]
             ]
-            st.table(pd.DataFrame(importance_rows), hide_index=True,
-                     alt="Most important features in the synthetic model across generated training profiles.")
-            st.caption("These metrics describe performance on the simulator’s data distribution only.")
+            st.table(
+                pd.DataFrame(importance_rows),
+                hide_index=True,
+            alt=(
+                    "Most important features in the synthetic model across "
+                    "generated training profiles."
+            ),
+            )
+            st.caption(
+                "These metrics describe performance on the simulator’s data distribution only."
+            )
         with st.expander("Simulated response to a bank channel"):
             st.json({
                 "consent": bool(st.session_state.get("coveriq_opted_in", False)),
@@ -316,8 +378,7 @@ def after_page() -> None:
 st.title("CoverIQ · Demo")
 st.caption("Customer-permitted product matching, demonstrated with fictional information.")
 st.info(
-    "No real customer data is used. There is no connection to Zenith Bank, Zenith General Insurance, "
-    "or Prudential Zenith Life; no quote, eligibility decision, or message is produced."
+    "No real customer data is used. "
 )
 stage = st.segmented_control("Demo story", options=STAGES, default=STAGES[0], key="demo_stage")
 if stage == STAGES[1]:

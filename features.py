@@ -1,4 +1,4 @@
-"""Summarize transaction history as a small set of customer signals."""
+"""Calculate salary and cash-flow features from categorized transactions."""
 
 from __future__ import annotations
 

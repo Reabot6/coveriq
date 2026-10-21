@@ -1,3 +1,5 @@
+"""Generate fictional account activity for each batch-demo customer."""
+
 from __future__ import annotations
 
 from calendar import monthrange

@@ -1,8 +1,6 @@
-"""Fictional customers and catalogue entries for the batch demo."""
+"""Fictional customer profiles and product catalogue for batch matching."""
 
-
-# These are opaque demo references, not hashes of the customers' names.
-# The names and profile details below are fictional.
+# IDs are demo references, not hashes of names. All profile details are fictional.
 CUSTOMERS = [
     {
         "customer_id": "CUST-001",
@@ -36,6 +34,10 @@ OFFERS = [
             "stated long-term savings goal",
             "sustained positive cash flow",
         ],
+        "match_rules": {
+            "required_need": "long_term_savings",
+            "minimum_positive_cashflow_month_share": 0.75,
+        },
         "message": "Would you like to review My Smart Save?",
         "catalogue_url": "https://prudentialzenith.com/",
     },
@@ -46,6 +48,7 @@ OFFERS = [
         "category": "education_savings",
         "customer_need": "Save toward a child's education.",
         "fit_signals": ["stated education savings goal"],
+        "match_rules": {"required_need": "education_savings"},
         "message": "Would you like to review an education savings plan?",
         "catalogue_url": "https://prudentialzenith.com/",
     },
@@ -56,6 +59,7 @@ OFFERS = [
         "category": "motor_insurance",
         "customer_need": "Explore cover for a vehicle the customer owns or uses.",
         "fit_signals": ["declared vehicle ownership or use"],
+        "match_rules": {"required_asset": "vehicle"},
         "message": "Would you like to review Zenith motor cover?",
         "catalogue_url": "https://www.zenithinsurance.com.ng/our-products",
     },
@@ -66,6 +70,10 @@ OFFERS = [
         "category": "marine_hull",
         "customer_need": "Explore cover for a vessel or watercraft.",
         "fit_signals": ["declared vessel ownership or operation"],
+        "match_rules": {
+            "required_need": "vessel_protection",
+            "required_asset": "small_cargo_vessel",
+        },
         "message": "Would you like to review Marine Hull cover?",
         "catalogue_url": "https://www.zenithinsurance.com.ng/our-products",
     },
@@ -76,6 +84,7 @@ OFFERS = [
         "category": "marine_cargo",
         "customer_need": "Explore cover for goods moved by sea.",
         "fit_signals": ["declared marine cargo or freight activity"],
+        "match_rules": {"required_credit_category": "freight_income"},
         "message": "Would you like to review Marine Cargo cover?",
         "catalogue_url": "https://www.zenithinsurance.com.ng/our-products",
     },

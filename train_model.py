@@ -1,4 +1,4 @@
-"""Train and evaluate CoverIQ's synthetic forward cash-flow model."""
+"""Train and evaluate the synthetic forward cash-flow model."""
 
 from __future__ import annotations
 

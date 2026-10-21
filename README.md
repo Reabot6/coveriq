@@ -14,11 +14,9 @@ The point is to make outreach more useful: fewer messages that do not fit, and c
 
 Insurance is the example that makes the idea easy to see. The demo uses a Prudential Zenith Life savings product and a fictional customer. CoverIQ is not only an insurance recommender; the same matching approach could work with other products if we have the right catalogue information and fit checks for them.
 
-
-
 ## What I learned from the research
 
-refeence 
+References
 
 - [Amazon Personalize: Personalized Ranking v2](https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-personalized-ranking-v2.html)
 - [Amazon Personalize: Next Best Action](https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-next-best-action.html)
@@ -32,8 +30,6 @@ refeence
 4. Rank the remaining options and decide whether to show something, wait, or suppress outreach.
 5. Return the suggestion and a plain explanation to a channel the bank already uses.
 6. Record what happened so the bank can measure whether the suggestions were useful.
-
-
 
 ## What I want the next build to prove
 

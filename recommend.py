@@ -1,4 +1,4 @@
-"""Combine a forward cash-flow model with explicit recommendation guardrails."""
+"""Apply consent and timing safeguards to the synthetic cash-flow estimate."""
 
 from __future__ import annotations
 
@@ -36,8 +36,14 @@ def recommend(
         }
 
     goal_by_label = {label: goal for goal, label in GOAL_LABELS.items()}
-    selected_goals = [goal_by_label[label] for label in preferred_goals if label in goal_by_label]
-    selected_products = [product for product in PRODUCTS.values() if product["goal"] in selected_goals]
+    selected_goals = [
+        goal_by_label[label]
+        for label in preferred_goals
+        if label in goal_by_label
+    ]
+    selected_products = [
+        product for product in PRODUCTS.values() if product["goal"] in selected_goals
+    ]
     if not selected_products:
         raise ValueError("Choose at least one customer goal from the demo catalogue")
 

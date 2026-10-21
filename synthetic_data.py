@@ -1,9 +1,4 @@
-"""Generate synthetic histories for a forward cash-flow persistence model.
-
-Each training example contains a 36-month observed history and a six-month
-simulated future. The label comes from that future window, not from the
-recommendation rule used by the demo.
-"""
+"""Generate synthetic histories and forward cash-flow persistence labels."""
 
 from __future__ import annotations
 

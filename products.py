@@ -1,5 +1,4 @@
-"""Small product catalogue used by the CoverIQ demo."""
-
+"""Small Prudential Zenith Life catalogue used by the original demo scene."""
 
 PRODUCTS = {
     "my_smart_save": {
@@ -12,7 +11,9 @@ PRODUCTS = {
         "name": "My EduSave",
         "goal": "education",
         "summary": "Savings toward a child’s education with protection during the policy term.",
-        "source_note": "Prudential Zenith 2024 audited statements describe education savings and protection.",
+        "source_note": (
+            "Prudential Zenith 2024 audited statements describe education savings and protection."
+        ),
     },
     "my_life_plan": {
         "name": "My Life Plan",

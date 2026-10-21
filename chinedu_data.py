@@ -1,4 +1,4 @@
-"""Fictional customer details and transaction history for the demo."""
+"""Fictional salary history used in the CoverIQ demo."""
 
 from __future__ import annotations
 
