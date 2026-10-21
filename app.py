@@ -473,9 +473,36 @@ def batch_page() -> None:
             for result in evaluation["evaluations"]
         ]
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.markdown("#### Candidates to review, in order")
         st.caption(
-            "A candidate passes the demo fit checks and can be ranked later. It is not an "
-            "underwriting result, quote, or purchase recommendation."
+            "Fit points order the offers using their supporting signals. They are a transparent "
+            "demo score, not an ML probability, confidence score, or eligibility decision."
+        )
+        for customer in CUSTOMERS:
+            customer_id = customer["customer_id"]
+            candidates = evaluation["ranked_candidates"].get(customer_id, [])
+            st.markdown(f"**{customer['name']}**")
+            if not candidates:
+                st.write("No offer passed the catalogue checks for this profile.")
+                continue
+
+            ranked_rows = [
+                {
+                    "Rank": candidate["rank"],
+                    "Offer": offer_names[candidate["offer_id"]],
+                    "Fit points": candidate["fit_points"],
+                    "Evidence": "; ".join(candidate["matched_signals"]),
+                }
+                for candidate in candidates
+            ]
+            st.dataframe(
+                pd.DataFrame(ranked_rows),
+                hide_index=True,
+                width="stretch",
+            )
+        st.caption(
+            "A candidate passes the demo fit checks and appears in the ordering above. "
+            "It is not an underwriting result, quote, or purchase recommendation."
         )
 
 

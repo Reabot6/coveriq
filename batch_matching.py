@@ -6,6 +6,7 @@ from collections import Counter
 from typing import Any
 
 from offer_matching import evaluate_offer_match
+from ranking import rank_candidates
 
 
 def evaluate_catalogue(
@@ -28,4 +29,5 @@ def evaluate_catalogue(
             "suppressed": counts["suppressed"],
         },
         "evaluations": evaluations,
+        "ranked_candidates": rank_candidates(evaluations),
     }
