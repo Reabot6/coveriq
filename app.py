@@ -5,7 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from batch_matching import evaluate_catalogue
 from chinedu_data import CUSTOMER, build_transactions
+from customer_profiles import build_customer_profiles
+from demo_activity import build_demo_activity
+from demo_batch import CUSTOMERS, OFFERS
 from features import calculate_features, feature_rows
 from products import GOAL_LABELS
 from recommend import recommend
@@ -20,7 +24,12 @@ def get_model():
     return train_model()
 
 
-STAGES = ["Why CoverIQ", "Before · Current journey", "After · CoverIQ"]
+STAGES = [
+    "Why CoverIQ",
+    "Before · Current journey",
+    "After · SmartSave model",
+    "After · Batch matching",
+]
 ANALYSIS_STATE_KEYS = (
     "coveriq_analysis_result",
     "coveriq_analysis_features",
@@ -65,7 +74,8 @@ def intro_page() -> None:
             st.markdown("#### Potential business value")
             st.write(
                 "Test whether better timed, better qualified referrals improve customer response "
-                "and reduce irrelevant outreach.
+                "and reduce irrelevant outreach. This is a hypothesis to measure, not a result "
+                "we can claim yet."
             )
     st.markdown("#### What CoverIQ does")
     st.write(
@@ -78,8 +88,8 @@ def intro_page() -> None:
         "fit checks for each product."
     )
     st.caption(
-        "The challenge statement supports the problem framing.  "
-        "campaigns are untargeted or that CoverIQ improves conversion."
+        "The challenge statement supports the problem framing. It does not show that current "
+        "campaigns are untargeted or prove that CoverIQ improves conversion."
     )
 
 
@@ -87,7 +97,7 @@ def before_page() -> None:
     st.title("Before · Product discovery can be hard to navigate")
     st.warning(
         "The challenge identifies the risk of multiple, irrelevant, or excessive offers. "
-       
+        "This scene is an illustration, not a verified description of Zenith’s current process."
     )
     step = st.session_state.setdefault("manual_step", 0)
     st.progress(
@@ -346,26 +356,28 @@ def after_page() -> None:
             st.table(
                 pd.DataFrame(importance_rows),
                 hide_index=True,
-            alt=(
+                alt=(
                     "Most important features in the synthetic model across "
                     "generated training profiles."
-            ),
+                ),
             )
             st.caption(
                 "These metrics describe performance on the simulator’s data distribution only."
             )
         with st.expander("Simulated response to a bank channel"):
-            st.json({
-                "consent": bool(st.session_state.get("coveriq_opted_in", False)),
-                "customer_ref": "DEMO-001",
-                "action": result["action"],
-                "customer_goals": result["matched_goals"],
-                "matching_catalogue_products": result["products"],
-                "reason": result["reason"],
-                "model_target": result["model_target"],
-                "synthetic_estimate": result["probability_surplus_persists"],
-                "delivery": "not_sent_demo_only",
-            })
+            st.json(
+                {
+                    "consent": bool(st.session_state.get("coveriq_opted_in", False)),
+                    "customer_ref": "DEMO-001",
+                    "action": result["action"],
+                    "customer_goals": result["matched_goals"],
+                    "matching_catalogue_products": result["products"],
+                    "reason": result["reason"],
+                    "model_target": result["model_target"],
+                    "synthetic_estimate": result["probability_surplus_persists"],
+                    "delivery": "not_sent_demo_only",
+                }
+            )
     left, right = st.columns(2)
     with left:
         if st.button("Back to product interest", key="coveriq_back_to_products"):
@@ -375,16 +387,110 @@ def after_page() -> None:
         st.button("Restart CoverIQ", key="coveriq_restart", on_click=reset_coveriq)
 
 
+def batch_page() -> None:
+    """Show consent-gated matching across the demo catalogue."""
+    st.title("After · Batch matching")
+    st.write(
+        "CoverIQ checks the same five catalogue offers against two fictional customer profiles. "
+        "Each customer controls whether their demo history is included."
+    )
+    st.caption(
+        "These check results only identify offers to consider for ranking. They do not mean "
+        "a customer qualifies for a product."
+    )
+
+    consent_by_id = {}
+    columns = st.columns(len(CUSTOMERS))
+    for customer, column in zip(CUSTOMERS, columns):
+        customer_id = customer["customer_id"]
+        consent_key = f"batch_consent_{customer_id}"
+        with column:
+            st.markdown(f"#### {customer['name']} · {customer_id}")
+            st.caption(
+                f"Needs: {', '.join(customer['stated_needs']) or 'none stated'} · "
+                f"Assets: {', '.join(customer['declared_assets']) or 'none declared'}"
+            )
+            consent_by_id[customer_id] = st.checkbox(
+                f"Allow analysis of {customer['name']}’s fictional activity",
+                key=consent_key,
+            )
+    st.caption("These toggles are demo controls only; they do not record legal consent.")
+
+    consent_signature = tuple(sorted(consent_by_id.items()))
+    if st.session_state.get("batch_consent_signature") != consent_signature:
+        st.session_state.pop("batch_evaluation", None)
+        st.session_state["batch_consent_signature"] = consent_signature
+
+    if st.button("Check the catalogue", type="primary", key="batch_run"):
+        opted_in_ids = {
+            customer_id
+            for customer_id, consent_given in consent_by_id.items()
+            if consent_given
+        }
+        customers = [
+            {**customer, "consent_given": consent_by_id[customer["customer_id"]]}
+            for customer in CUSTOMERS
+        ]
+
+        with st.status("CoverIQ is checking the catalogue", expanded=True) as status:
+            st.write("Reading each customer’s demo choice before loading activity.")
+            activity = build_demo_activity(opted_in_ids)
+            profiles = build_customer_profiles(customers, activity)
+            st.write("Summarizing activity only for customers who opted in.")
+            evaluation = evaluate_catalogue(profiles, OFFERS)
+            st.write(
+                f"Checked {evaluation['total_pairs']} customer–offer combinations "
+                "against the catalogue fit signals."
+            )
+            status.update(
+                label="Catalogue review complete · no offers were sent",
+                state="complete",
+                expanded=True,
+            )
+
+        st.session_state["batch_evaluation"] = evaluation
+
+    evaluation = st.session_state.get("batch_evaluation")
+    if evaluation:
+        candidate, not_candidate, suppressed = st.columns(3)
+        candidate.metric("Candidates for ranking", evaluation["counts"]["candidate"])
+        not_candidate.metric("No fit found", evaluation["counts"]["not_candidate"])
+        suppressed.metric("Suppressed", evaluation["counts"]["suppressed"])
+
+        customer_names = {
+            customer["customer_id"]: customer["name"] for customer in CUSTOMERS
+        }
+        offer_names = {offer["offer_id"]: offer["name"] for offer in OFFERS}
+        rows = [
+            {
+                "Customer": customer_names[result["customer_id"]],
+                "Offer": offer_names[result["offer_id"]],
+                "Status": result["status"].replace("_", " ").title(),
+                "Signals or reason": "; ".join(
+                    result["matched_signals"] or result["reasons"]
+                ),
+            }
+            for result in evaluation["evaluations"]
+        ]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.caption(
+            "A candidate passes the demo fit checks and can be ranked later. It is not an "
+            "underwriting result, quote, or purchase recommendation."
+        )
+
+
 st.title("CoverIQ · Demo")
 st.caption("Customer-permitted product matching, demonstrated with fictional information.")
 st.info(
-    "No real customer data is used. "
+    "No real customer data is used, no live bank connection exists, and no offer is sent."
 )
 stage = st.segmented_control("Demo story", options=STAGES, default=STAGES[0], key="demo_stage")
 if stage == STAGES[1]:
     before_page()
 elif stage == STAGES[2]:
     after_page()
+elif stage == STAGES[3]:
+    batch_page()
 else:
     intro_page()
 

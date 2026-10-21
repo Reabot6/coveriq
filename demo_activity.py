@@ -63,22 +63,24 @@ def _build_marine_business_transactions() -> list[dict[str, object]]:
     return sorted(transactions, key=lambda transaction: transaction["date"])
 
 
-def build_demo_activity() -> dict[str, dict[str, object]]:
-    """Return account histories and opening balances keyed by demo customer ID."""
-    salaried_customer = next(
-        customer for customer in CUSTOMERS if customer["customer_id"] == "CUST-001"
-    )
-    marine_customer = next(
-        customer for customer in CUSTOMERS if customer["customer_id"] == "CUST-002"
-    )
+def build_demo_activity(
+    customer_ids: set[str] | None = None,
+) -> dict[str, dict[str, object]]:
+    """Build fictional histories for the requested demo customer IDs."""
+    requested_ids = customer_ids
+    if requested_ids is None:
+        requested_ids = {customer["customer_id"] for customer in CUSTOMERS}
 
-    return {
-        salaried_customer["customer_id"]: {
+    activity = {}
+    if "CUST-001" in requested_ids:
+        activity["CUST-001"] = {
             "opening_balance": 450_000,
             "transactions": build_transactions(stable_months_after_raise=9),
-        },
-        marine_customer["customer_id"]: {
+        }
+    if "CUST-002" in requested_ids:
+        activity["CUST-002"] = {
             "opening_balance": 8_500_000,
             "transactions": _build_marine_business_transactions(),
-        },
-    }
+        }
+
+    return activity
