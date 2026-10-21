@@ -1,43 +1,40 @@
 # CoverIQ
 
-CoverIQ is a Streamlit prototype for the Zecathon customer product-matching challenge. It demonstrates a consent-gated flow that maps stated customer goals to catalogue entries, forecasts synthetic cash-flow persistence, and returns recommend, wait, or suppress with an explanation.
+## My notes on the idea
 
-## Demo flow
+After the research and outreach I’ve done so far, I’m updating the build to focus on the full Track 9 challenge: help a bank work out which products may be relevant to each customer, when to show them, and when to leave the customer alone.
 
-1. Why CoverIQ — states the customer problem and the business value CoverIQ aims to test. Business outcomes are hypotheses, not proven results.
-2. Before — an illustrative customer-led product discovery flow. The challenge identifies irrelevant or excessive offers as a problem; this screen is not a verified copy of Zenith's current process.
-3. After — Chinedu opts in, selects one or more goals, reviews 36 months of fictional activity, and sees the goal-matched catalogue entries, model estimate, decision, and simulated response.
+CoverIQ is the intelligence layer that does that matching. It uses customer-permitted information and financial behaviour to build a useful, changing picture of what a customer might need. It then checks the bank’s product catalogue and returns a next step, such as show a relevant product to review, wait for more evidence, or suppress the offer.
 
-The worked example uses Prudential Zenith Life's My Smart Save catalogue entry. Zenith General Insurance is a separate insurer. Adding its products would require distinct customer signals, product checks, and validated data; this prototype does not claim to match across both insurers.
+The customer ID is how the bank links permitted signals and past interactions to the right profile. It is an identifier, not permission by itself. The customer should still be able to choose whether to look at a product or continue with it.
 
-## What the model does
+The point is to make outreach more useful: fewer messages that do not fit, and clearer product suggestions when there is a good reason to show one. The bank can also learn from what happens after an offer is shown, like whether it was viewed, dismissed, or explored. We need to measure that; we have not proved business results yet.
 
-synthetic_data.py simulates 36-month histories and the following six months. Its label records whether monthly net cash flow is positive in at least five future months. train_model.py fits a Random Forest on generated profiles and evaluates it on held-out generated profiles. At inference, the model estimates the same persistence target for Chinedu.
+## Why insurance is in the demo
 
-Product matching is separate and explainable: the customer's stated goal maps to product catalogue goals. recommend.py applies consent, customer interest, net-flow, recent-income-change, and model-threshold safeguards before it shows information for review. The model does not rank products.
+Insurance is the example that makes the idea easy to see. The demo uses a Prudential Zenith Life savings product and a fictional customer. CoverIQ is not only an insurance recommender; the same matching approach could work with other products if we have the right catalogue information and fit checks for them.
 
-This is more meaningful than training a classifier to repeat a label that directly says “recommend at nine months.” However, evaluation is only against our simulator. The estimate is not calibrated or validated on actual bank customers, and does not establish product suitability, affordability, eligibility, conversion, or policy persistence.
 
-## Files
 
-- app.py — three-stage presentation, before/after journeys, transaction history, model evidence, and simulated response.
-- chinedu_data.py — fictional Chinedu and his 36-month salary-change scenarios.
-- features.py — income stability, recent change, time at new salary, net flow, and balance trend features.
-- synthetic_data.py — synthetic 36-month histories plus six future months and the forward cash-flow label.
-- train_model.py — Random Forest training and held-out synthetic evaluation.
-- recommend.py — goal-to-catalogue mapping, safeguards, and explainable action.
-- products.py — demo product catalogue and goal labels.
-- PROJECT_GUIDE.md — model explanation, limitations, and presenter checklist.
+## What I learned from the research
 
-## Run on Windows PowerShell
+refeence 
 
-From this project directory, run:
+- [Amazon Personalize: Personalized Ranking v2](https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-personalized-ranking-v2.html)
+- [Amazon Personalize: Next Best Action](https://docs.aws.amazon.com/personalize/latest/dg/native-recipe-next-best-action.html)
+- [Amazon Personalize: Recording real-time events](https://docs.aws.amazon.com/personalize/latest/dg/recording-events.html)
 
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m streamlit run app.py
+## How I see CoverIQ working
 
-If .venv does not exist yet, create it with python -m venv .venv, then install requirements.
+1. Link permitted customer signals to a bank-controlled customer ID.
+2. Keep a useful profile of the customer’s interests, activity, and responses to previous offers.
+3. Check the product catalogue and remove options that do not pass the relevant fit and contact rules.
+4. Rank the remaining options and decide whether to show something, wait, or suppress outreach.
+5. Return the suggestion and a plain explanation to a channel the bank already uses.
+6. Record what happened so the bank can measure whether the suggestions were useful.
 
-## Claim boundary
 
-All customer records and model-training profiles are generated. Consent is a UI demonstration; no notification is sent, and there is no connection to Zenith Bank, Zenith General Insurance, or Prudential Zenith Life. A real deployment needs approved data access, verified product requirements, consent and privacy controls, and evaluation on authorized real outcomes. No business lift has been demonstrated.
+
+## What I want the next build to prove
+
+The next version should show the broader intelligence layer more clearly: a customer profile linked by ID, a catalogue with several options, a reasoned ranking, timing and suppression decisions, and a record of what the customer did with the suggestion. Insurance can stay as the first example. The demo should make it obvious why CoverIQ chose one next step for Chinedu and why it held back on the others.
