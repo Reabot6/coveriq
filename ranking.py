@@ -34,13 +34,14 @@ def rank_candidates(
                 "offer_id": result["offer_id"],
                 "fit_points": sum(point_breakdown.values()),
                 "point_breakdown": point_breakdown,
+                "model_score": result["model_score"],
                 "matched_signals": result["matched_signals"],
             }
         )
 
     ranked = {}
     for customer_id, candidates in by_customer.items():
-        candidates.sort(key=lambda item: (-item["fit_points"], item["offer_id"]))
+        candidates.sort(key=lambda item: (-item["model_score"], item["offer_id"]))
         for position, candidate in enumerate(candidates, start=1):
             candidate["rank"] = position
         ranked[customer_id] = candidates

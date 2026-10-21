@@ -390,14 +390,7 @@ def after_page() -> None:
 def batch_page() -> None:
     """Show consent-gated matching across the demo catalogue."""
     st.title("After · Batch matching")
-    st.write(
-        "CoverIQ checks the same five catalogue offers against two fictional customer profiles. "
-        "Each customer controls whether their demo history is included."
-    )
-    st.caption(
-        "These check results only identify offers to consider for ranking. They do not mean "
-        "a customer qualifies for a product."
-    )
+    st.caption("Two fictional profiles · five offers · one suggested action per person")
 
     consent_by_id = {}
     columns = st.columns(len(CUSTOMERS))
@@ -405,16 +398,13 @@ def batch_page() -> None:
         customer_id = customer["customer_id"]
         consent_key = f"batch_consent_{customer_id}"
         with column:
-            st.markdown(f"#### {customer['name']} · {customer_id}")
-            st.caption(
-                f"Needs: {', '.join(customer['stated_needs']) or 'none stated'} · "
-                f"Assets: {', '.join(customer['declared_assets']) or 'none declared'}"
-            )
+            st.markdown(f"#### {customer['name']}")
+            st.caption(f"Demo ID: {customer_id}")
             consent_by_id[customer_id] = st.checkbox(
-                f"Allow analysis of {customer['name']}’s fictional activity",
+                f"Opt in {customer['name']} for this demo",
                 key=consent_key,
             )
-    st.caption("These toggles are demo controls only; they do not record legal consent.")
+    st.caption("Fictional data only. These demo controls do not record legal consent.")
 
     consent_signature = tuple(sorted(consent_by_id.items()))
     if st.session_state.get("batch_consent_signature") != consent_signature:
@@ -432,18 +422,16 @@ def batch_page() -> None:
             for customer in CUSTOMERS
         ]
 
-        with st.status("CoverIQ is checking the catalogue", expanded=True) as status:
-            st.write("Reading each customer’s demo choice before loading activity.")
+        with st.status("CoverIQ is working", expanded=True) as status:
+            st.write(f"Demo opt-ins: {len(opted_in_ids)} of {len(CUSTOMERS)} profiles.")
             activity = build_demo_activity(opted_in_ids)
             profiles = build_customer_profiles(customers, activity)
-            st.write("Summarizing activity only for customers who opted in.")
+            st.write("Loaded and summarized activity for opted-in profiles only.")
             evaluation = evaluate_catalogue(profiles, OFFERS)
-            st.write(
-                f"Checked {evaluation['total_pairs']} customer–offer combinations "
-                "against the catalogue fit signals."
-            )
+            st.write(f"Checked {evaluation['total_pairs']} profile–offer combinations.")
+            st.write("Ranked the passing matches and prepared at most one offer per profile.")
             status.update(
-                label="Catalogue review complete · no offers were sent",
+                label="Review complete · no messages sent",
                 state="complete",
                 expanded=True,
             )
@@ -452,57 +440,66 @@ def batch_page() -> None:
 
     evaluation = st.session_state.get("batch_evaluation")
     if evaluation:
-        candidate, not_candidate, suppressed = st.columns(3)
-        candidate.metric("Candidates for ranking", evaluation["counts"]["candidate"])
-        not_candidate.metric("No fit found", evaluation["counts"]["not_candidate"])
-        suppressed.metric("Suppressed", evaluation["counts"]["suppressed"])
-
-        customer_names = {
-            customer["customer_id"]: customer["name"] for customer in CUSTOMERS
-        }
         offer_names = {offer["offer_id"]: offer["name"] for offer in OFFERS}
-        rows = [
-            {
-                "Customer": customer_names[result["customer_id"]],
-                "Offer": offer_names[result["offer_id"]],
-                "Status": result["status"].replace("_", " ").title(),
-                "Signals or reason": "; ".join(
-                    result["matched_signals"] or result["reasons"]
-                ),
-            }
-            for result in evaluation["evaluations"]
-        ]
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-        st.markdown("#### Candidates to review, in order")
-        st.caption(
-            "Fit points order the offers using their supporting signals. They are a transparent "
-            "demo score, not an ML probability, confidence score, or eligibility decision."
+        suggested_count = sum(
+            action["action"] == "show_for_review"
+            for action in evaluation["next_best_actions"].values()
         )
+        baseline_count = len(CUSTOMERS) * len(OFFERS)
+        broadcast, coveriq, held_back = st.columns(3)
+        broadcast.metric("Illustrative broadcast", baseline_count, "5 offers per profile")
+        coveriq.metric("CoverIQ suggestions", suggested_count, "at most one per profile")
+        held_back.metric("Offers held back", baseline_count - suggested_count)
+        st.caption(
+            "The broadcast is a demo comparison, not a claim about Zenith’s current campaigns."
+        )
+
         for customer in CUSTOMERS:
             customer_id = customer["customer_id"]
-            candidates = evaluation["ranked_candidates"].get(customer_id, [])
-            st.markdown(f"**{customer['name']}**")
-            if not candidates:
-                st.write("No offer passed the catalogue checks for this profile.")
-                continue
+            action = evaluation["next_best_actions"][customer_id]
+            with st.container(border=True):
+                st.markdown(f"#### {customer['name']}")
+                if action["action"] == "show_for_review":
+                    offer = action["recommended_offer"]
+                    st.success(f"Show for review · {offer['name']}")
+                    st.caption(offer["provider"])
+                    score, evidence = st.columns(2)
+                    score.metric("Model relevance score", f"{offer['model_score']:.0%}")
+                    evidence.metric("Fit signals", offer["fit_points"])
+                    st.info(offer["message"])
+                    st.caption(
+                        "Why it surfaced: " + ", ".join(offer["matched_signals"])
+                    )
+                else:
+                    st.warning("Suppress · no offer to show")
+                    st.caption(action["reason"])
 
-            ranked_rows = [
-                {
-                    "Rank": candidate["rank"],
-                    "Offer": offer_names[candidate["offer_id"]],
-                    "Fit points": candidate["fit_points"],
-                    "Evidence": "; ".join(candidate["matched_signals"]),
-                }
-                for candidate in candidates
-            ]
-            st.dataframe(
-                pd.DataFrame(ranked_rows),
-                hide_index=True,
-                width="stretch",
-            )
+                with st.expander("Show the catalogue checks"):
+                    customer_checks = [
+                        result
+                        for result in evaluation["evaluations"]
+                        if result["customer_id"] == customer_id
+                    ]
+                    check_rows = [
+                        {
+                            "Offer": offer_names[result["offer_id"]],
+                            "Result": result["status"].replace("_", " ").title(),
+                            "Evidence": "; ".join(
+                                result["matched_signals"] or result["reasons"]
+                            ),
+                        }
+                        for result in customer_checks
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(check_rows),
+                        hide_index=True,
+                        width="stretch",
+                    )
+                    st.json(action)
         st.caption(
-            "A candidate passes the demo fit checks and appears in the ordering above. "
-            "It is not an underwriting result, quote, or purchase recommendation."
+            "The model ranks only offers that pass the product-fit checks. Its score is trained on "
+            "simulated responses, not Zenith customer outcomes, and is not eligibility or affordability. "
+            "No messages are sent."
         )
 
 
