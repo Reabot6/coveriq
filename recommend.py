@@ -8,6 +8,7 @@ from products import GOAL_LABELS, PRODUCTS
 from synthetic_data import FEATURE_COLUMNS
 
 MIN_SURPLUS_PERSISTENCE_ESTIMATE = 0.55
+MIN_MONTHS_AT_NEW_INCOME_LEVEL = 6
 
 
 def recommend(
@@ -54,12 +55,15 @@ def recommend(
     positive_class_index = list(model.classes_).index(1)
     probability = float(model.predict_proba(model_input)[0][positive_class_index])
 
-    if features["average_monthly_surplus"] <= 0:
+    if features["mean_monthly_surplus"] <= 0:
         action = "suppress"
-        reason = "Recent credits do not exceed recorded debits in this fictional history."
-    elif features["months_since_income_change"] < 6:
+        reason = "Recent monthly outflows meet or exceed credits in this fictional history."
+    elif (
+        features["recent_income_change_pct"] >= 0.25
+        and features["months_since_income_change"] < MIN_MONTHS_AT_NEW_INCOME_LEVEL
+    ):
         action = "wait"
-        reason = "The higher income level is recent; wait for more observed history."
+        reason = "The income increase is recent; wait for more months at this level."
     elif probability < MIN_SURPLUS_PERSISTENCE_ESTIMATE:
         action = "wait"
         reason = (
@@ -83,5 +87,5 @@ def recommend(
         "products": [product["name"] for product in selected_products],
         "matched_goals": [GOAL_LABELS[goal] for goal in selected_goals],
         "reason": reason,
-        "model_target": "Positive monthly net cash flow in at least five of six future synthetic months",
+        "model_target": "Positive net cash flow in each of the next three simulated months",
     }
