@@ -28,4 +28,3 @@ The insurance catalogue example is Prudential Zenith Life's My Smart Save. The a
 
 The model estimates whether a basic cash buffer is likely to remain for the next three months under a sample contribution scenario. It is trained and evaluated on generated histories and generated future outcomes. This proves the end-to-end model workflow; it does not establish accuracy for Zenith customers or real insurance affordability.
 
-See [MODEL.md](MODEL.md) for the feature calculations, training target, evaluation split and limits. See [POWERPOINT_POINTS.md](POWERPOINT_POINTS.md) for the current pitch notes.
