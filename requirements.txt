@@ -1,4 +1,5 @@
 streamlit>=1.65,<2
 pandas>=2.2,<4
 scikit-learn>=1.5,<2
-pyarrow>=18,<25
+pyarrow>=18
+joblib>=1.4,<2
