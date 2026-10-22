@@ -1,41 +1,63 @@
-# MBD product model
+# CoverIQ model and data flow
 
-## Data and prediction target
+## Demo objective
 
-CoverIQ trains on the public MBD-mini dataset. Each target row describes one customer and reporting month. The four `target_1` to `target_4` fields record whether the customer took each anonymous product in the following month. The product names are not included, so the demo keeps the IDs anonymous.
+The demo asks a narrow question: given a customer's past account activity and an illustrative monthly contribution, how likely is the account to keep a basic cash buffer over the next three months?
 
-This MVP reads the transaction stream only. It leaves the dialogue embeddings and geolocation stream out of the model.
+That estimate is used to route an insurance offer for bank review or hold it back. It is not an insurance-need prediction, eligibility decision, premium calculation, or financial advice.
 
-The code samples 10,000 customers from each of the five client folds and retains all 12 monthly rows for each sampled customer. This gives up to 600,000 customer-month examples. A customer's ID is used to join transactions and keep all of that customer's rows in one fold; it is never passed to a model as a feature.
+## Files
 
-## Transaction features
+- `synthetic_data.py` creates repeatable fictional transaction histories and monthly account summaries.
+- `cashflow_model.py` builds customer features, creates training examples, trains and evaluates the classifier, and scores demo accounts.
+- `app.py` runs the Streamlit experience and presents the bank review queue, an account timeline, contribution comparisons and aggregate partner counts.
+- `README.md` has the PowerShell run steps.
 
-For a reporting month `t`, the model only sees transactions from `t-11` through the end of `t`. The target describes the next month, so its outcome is outside that feature window.
+## Data generated
 
-The feature builder calculates:
+The generator produces 36 historical months and three later months per profile. The historical period contains transaction rows for salary or business income, other income, housing, food, utilities, transport, debt payments, savings transfers and other spending. The later three months are kept out of the model features and used only to create the training outcome.
 
-- transaction count, amount total, absolute amount magnitude, mean, standard deviation, minimum, and maximum;
-- active days and active months;
-- the number of distinct transaction types;
-- average and standard deviation of monthly amount totals and transaction counts across active months;
-- for the 12 most common event-type, subtype, and currency codes found in training folds, the transaction count and total absolute amount.
+There are 1,000 generated training profiles and a separate 12-account demo batch. Chinedu's history has a salary increase in its final three months. The remaining accounts vary in income regularity, fixed outflows, recent income changes and balance patterns.
 
-These event-type codes are anonymized categories. CoverIQ uses them as codes and does not assign meanings such as salary, rent, or shopping.
+All generated records use a fixed random seed so the demo can be repeated with the same results. The generator is a simulation with assumptions; it is not a sample of real banking customers.
 
-## Training and evaluation
+## Features
 
-One logistic-regression classifier is fitted for each product label. Each pipeline fills missing values with the training median, adds missing-value indicators, standardizes features, and fits the classifier. The dataset's fold 4 is kept aside for evaluation; folds 0 to 3 train the models. This tests performance on unseen clients within the dataset period; it is not a later-time test of performance drift.
+For each profile and contribution scenario, the feature builder summarizes the 36 historical months:
 
-For product `k`, the model calculates `p_k = 1 / (1 + exp(-(b_k + sum(w_kj * z_j))))`, where `z_j` is a standardized transaction feature. The demo selects the highest-scored product only if `p_k` is above that product's positive rate in the training folds. Otherwise it returns `hold_back`.
+- average monthly income, income variation and share of months with income;
+- the recent income level compared with the earlier history, and how many recent months show the higher level;
+- typical essential outflows and their share of income;
+- average monthly remainder, positive-remainder frequency and remainder variation;
+- account balance trend, latest balance and cash-buffer months;
+- the illustrative contribution amount relative to income and average remainder.
 
-The report includes ROC-AUC, average precision, Brier score, precision among the highest-scored 5% of examples, and lift over the held-out purchase rate. Average precision is compared with the purchase-rate baseline. These measures help show whether transaction patterns rank likely next-month purchases above a simple baseline. They do not establish insurance eligibility or prove performance on Zenith customers.
+The records are grouped by month before modeling. Customer IDs identify which rows belong together but are not model features.
 
-The demo's routing policy selects at most one product per account: the highest-ranked product whose model score exceeds that product's purchase rate in the training folds. If none clears its own baseline, the output is `hold_back`. This is a simple review threshold for the prototype, not a calibrated decision boundary.
+## Training target
 
-The Streamlit demo takes selected held-out feature rows and runs the saved classifiers at runtime. Example accounts are chosen to include both recorded purchases and non-purchases, while the reported evaluation metrics use the full held-out fold. It shows the top product label, the complete four-label ranking, the recorded next-month outcome for comparison, and the largest positive linear-model feature contributions for the top-ranked product. The outcome is available only as an offline benchmark; it is not an input to scoring. Contributions explain the model score; they are not causal explanations. No real customer identity is displayed and no offer is sent.
+Each profile is paired with five illustrative monthly contribution scenarios: ₦5,000, ₦15,000, ₦30,000, ₦60,000 and ₦120,000. These are demo comparison values; Prudential Zenith has not supplied a pricing schedule for this prototype.
 
-The model scores are useful for ranking in this dataset, but the reported Brier scores show little or no improvement over a purchase-rate-only estimate. Treat the scores as ranking signals, not well-calibrated probabilities or measures of affordability.
+For each pair, the label is `1` if the simulated closing balance stays above 25% of the profile's typical essential monthly outflows in all three later months after subtracting the contribution each month. Otherwise, the label is `0`.
 
-## Source
+The target is observable in the generated future transactions. It is not an observed insurance purchase or a real customer's demonstrated ability to maintain a policy.
 
-MBD-mini is published by the AI Lab under CC BY 4.0. Dataset card: <https://huggingface.co/datasets/ai-lab/MBD-mini>. Paper: <https://arxiv.org/abs/2409.17587>.
+## Model and evaluation
+
+The model is a scikit-learn pipeline: median imputation, feature standardization and logistic regression. It trains on 80% of the 1,000 generated training profiles; the other 20% are held out by profile before expanding them into contribution examples. Chinedu and the visible demo accounts are kept out of both sets and are scored only after training.
+
+The app reports ROC-AUC, average precision and Brier score on held-out generated profiles. Those metrics describe performance on this simulation only. The 65% review threshold is a demo routing policy, not a threshold learned from an insurer's outcomes. Linear feature contributions are shown as signals that move the score up or down; they are not causal explanations.
+
+## What the interface shows
+
+1. A batch summary of accounts routed for review and accounts held back.
+2. A bank-side queue with the top contribution scenario and model estimate for each demo account.
+3. A detail view with 36-month income, outflow and balance history for the selected account.
+4. The model estimate for each contribution scenario and its review/hold action.
+5. Aggregate counts by contribution scenario for the insurance partner. Customer-level account mapping remains on the bank side in the proposed flow.
+
+The catalogue example is My Smart Save, described by Prudential Zenith Life as a long-term savings plan with life cover. See the [product information page](https://campaign.prudentialzenith.com/dream-big-invest-in-your-tomorrow/). The demo does not claim to reproduce its pricing or underwriting.
+
+## What would be needed for a real pilot
+
+A bank would need to supply approved transaction data, and the insurer would need to confirm the current catalogue and permitted contribution options. The model would then need labels from relevant future cash-flow or offer outcomes, evaluation on later real customer periods, review by bank and insurer teams, and a controlled pilot. The generated demo does not substitute for those steps.
