@@ -26,9 +26,17 @@ build/
 dist/
 *.egg-info/
 
+# Node dependencies
+node_modules/
+**/node_modules/
+
 # Downloaded datasets and local model artifacts
 data/
 models/
+
+# Local presentation build files and PowerPoint lock files
+.codex-pitch-build/
+~$*.pptx
 
 # Private working notes
 DEMO_GUIDE.md
