@@ -57,23 +57,30 @@ def recommend(
 
     if features["mean_monthly_surplus"] <= 0:
         action = "suppress"
-        reason = "Recent monthly outflows meet or exceed credits in this fictional history."
+        reason = "Recent monthly outflows meet or exceed account credits, so CoverIQ holds back the offer."
     elif (
         features["recent_income_change_pct"] >= 0.25
         and features["months_since_income_change"] < MIN_MONTHS_AT_NEW_INCOME_LEVEL
     ):
         action = "wait"
-        reason = "The income increase is recent; wait for more months at this level."
+        months = int(features["months_since_income_change"])
+        reason = (
+            f"Income is {features['recent_income_change_pct']:.0%} above its earlier level, "
+            f"but has held there for only {months} months. CoverIQ is waiting for more history."
+        )
     elif probability < MIN_SURPLUS_PERSISTENCE_ESTIMATE:
         action = "wait"
         reason = (
-            "The synthetic model estimate is below the demo threshold for showing this product."
+            f"The model estimates a {probability:.0%} chance of positive cash flow in each "
+            f"of the next three months, below the {MIN_SURPLUS_PERSISTENCE_ESTIMATE:.0%} "
+            "review threshold."
         )
     else:
         action = "recommend"
         reason = (
-            "The observed pattern and synthetic forward cash-flow estimate support showing "
-            "the selected product information for customer review."
+            f"Income has held at the higher level for "
+            f"{int(features['months_since_income_change'])} months, and the model estimates "
+            f"a {probability:.0%} chance of positive cash flow in each of the next three months."
         )
 
     return {

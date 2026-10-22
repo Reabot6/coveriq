@@ -25,8 +25,8 @@ def _month_start(month_offset: int) -> date:
 
 def build_transactions(stable_months_after_raise: int = 3) -> list[dict[str, object]]:
     """Create three years of fictional transactions through the last full month."""
-    if stable_months_after_raise not in (3, 6, 9):
-        raise ValueError("stable_months_after_raise must be 3, 6, or 9")
+    if stable_months_after_raise not in (3, 6, 9, 12):
+        raise ValueError("stable_months_after_raise must be 3, 6, 9, or 12")
 
     transactions: list[dict[str, object]] = []
     for month_index in range(HISTORY_MONTHS):

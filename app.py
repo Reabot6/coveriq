@@ -1,4 +1,4 @@
-"""Streamlit demo for CoverIQ's cash-flow based offer timing."""
+"""Interactive CoverIQ product-matching demo."""
 
 from __future__ import annotations
 
@@ -14,78 +14,65 @@ from recommend import recommend
 from train_model import train_model
 
 
-st.set_page_config(page_title="CoverIQ", page_icon="◈", layout="wide")
+st.set_page_config(page_title="CoverIQ", page_icon="C", layout="wide")
 
-MINIMUM_HIGH_INCOME_MONTHS = (3, 6, 9)
-STATE_KEYS = (
-    "scene",
-    "settings",
-    "result",
-    "consent",
-    "goals",
-    "raise_duration",
-)
+HIGH_INCOME_DURATIONS = (3, 6, 9, 12)
+SESSION_KEYS = ("scene", "settings", "result", "consent", "goals", "raise_duration")
 
 
 @st.cache_resource
 def load_model():
-    """Train once per app session and reuse the fitted model."""
+    """Fit once and reuse the model while the demo session is running."""
     return train_model()
 
 
 def restart_demo() -> None:
-    for key in STATE_KEYS:
+    for key in SESSION_KEYS:
         st.session_state.pop(f"coveriq_{key}", None)
 
 
-def show_intro() -> None:
+def customer_transactions(settings: dict[str, Any]) -> list[dict[str, Any]]:
+    return build_transactions(
+        stable_months_after_raise=settings["high_income_months"]
+    )
+
+
+def show_customer_setup() -> None:
     st.title("CoverIQ")
-    st.subheader("Relevant offers. Better timing.")
+    st.caption("Chinedu · Customer profile")
 
-    left, right = st.columns(2, gap="large")
+    left, right = st.columns([1, 1.25], gap="large")
     with left:
-        with st.container(border=True):
-            st.markdown("#### Product discovery")
-            st.write("Customers may see an offer before knowing whether it fits their situation.")
+        st.subheader("Offer preferences")
+        consent = st.checkbox(
+            "Allow CoverIQ to review this account's activity for the offers selected here.",
+            key="coveriq_consent",
+        )
+        st.multiselect(
+            "Which offers would Chinedu like to explore?",
+            options=list(GOAL_LABELS.values()),
+            default=[GOAL_LABELS[CUSTOMER["stated_goal"]]],
+            disabled=not consent,
+            key="coveriq_goals",
+        )
+
     with right:
-        with st.container(border=True):
-            st.markdown("#### CoverIQ")
-            st.write("With permission, it reviews financial patterns and decides whether to show, wait, or hold back.")
+        st.subheader("Income change")
+        high_income_months = st.select_slider(
+            "How many months has the higher salary continued?",
+            options=HIGH_INCOME_DURATIONS,
+            value=3,
+            disabled=not consent,
+            key="coveriq_raise_duration",
+        )
+        st.caption(
+            "This changes the salary history CoverIQ reviews. The rest of the account history stays the same."
+        )
 
-    st.caption("Insurance is the example. The same matching layer can support other products.")
-    if st.button("Start demo", type="primary", width="stretch"):
-        st.session_state["coveriq_scene"] = "setup"
-        st.rerun()
-
-
-def show_setup() -> None:
-    st.title("Chinedu")
-    st.caption("Fictional customer · Prudential Zenith Life example")
-
-    consent = st.checkbox(
-        "I agree to use Chinedu’s fictional bank history for this demo analysis.",
-        key="coveriq_consent",
-    )
-    selected_goals = st.multiselect(
-        "What offers does Chinedu want to hear about?",
-        options=list(GOAL_LABELS.values()),
-        default=[GOAL_LABELS[CUSTOMER["stated_goal"]]],
-        disabled=not consent,
-        key="coveriq_goals",
-    )
-    high_income_months = st.select_slider(
-        "Months at the higher income level",
-        options=MINIMUM_HIGH_INCOME_MONTHS,
-        value=3,
-        disabled=not consent,
-        key="coveriq_raise_duration",
-    )
-
-    st.caption("Connects a  account ")
-    if st.button("Connect demo account", type="primary", disabled=not consent):
+    if st.button("Review account activity", type="primary", disabled=not consent):
         st.session_state["coveriq_settings"] = {
             "consent": consent,
-            "selected_goals": selected_goals,
+            "selected_goals": list(st.session_state.get("coveriq_goals", [])),
             "high_income_months": high_income_months,
         }
         st.session_state["coveriq_scene"] = "review"
@@ -93,85 +80,69 @@ def show_setup() -> None:
 
 
 def run_review(settings: dict[str, Any]) -> dict[str, Any]:
-    transactions = build_transactions(
-        stable_months_after_raise=settings["high_income_months"]
-    )
+    transactions = customer_transactions(settings)
     status_area = st.empty()
-    with status_area.status("Reviewing the demo history", expanded=True) as status:
-        status.write("Reading 36 months of  credits and debits.")
+    with status_area.status("CoverIQ is reviewing the account", expanded=True) as status:
+        status.write("Reading 36 months of credits and debits")
         features = calculate_features(
             transactions,
-            stated_goal=CUSTOMER["stated_goal"],
             opening_balance=CUSTOMER["opening_balance"],
         )
-        status.write("Calculating income, spending, surplus, and balance signals.")
-        status.write("Fitting the cash-flow model on simulated training histories.")
-        model, model_report = load_model()
-        status.write("Forecasting whether positive cash flow persists over the next three months.")
+        status.write("Calculating income regularity, spending, surplus, and balance trends")
+        status.write("Loading the cash-flow model")
+        model, _ = load_model()
+        status.write("Estimating whether positive monthly cash flow will continue")
         decision = recommend(
             features,
             model,
             consent=settings["consent"],
             preferred_goals=settings["selected_goals"],
         )
-        status.write("Checking the selected interests against the offer catalogue.")
-        status.update(label="Review complete · no offer sent", state="complete", expanded=False)
+        status.write("Matching Chinedu's selected interests to the product catalogue")
+        status.update(label="Account review complete", state="complete", expanded=False)
 
     return {
         "transactions": transactions,
         "features": features,
         "timeline": feature_rows(transactions, CUSTOMER["opening_balance"]),
         "decision": decision,
-        "model_report": model_report,
     }
 
 
-def show_result(result: dict[str, Any]) -> None:
-    features = result["features"]
-    decision = result["decision"]
-    st.title("CoverIQ · Review")
-    st.caption("Chinedu · 36 months analyzed · no offer sent")
+def show_review(settings: dict[str, Any]) -> None:
+    st.title("CoverIQ · Background review")
+    st.caption("Chinedu · 36 months of account activity")
+
+    transactions = customer_transactions(settings)
+    features = calculate_features(
+        transactions,
+        opening_balance=CUSTOMER["opening_balance"],
+    )
 
     metric_columns = st.columns(4)
-    metric_columns[0].metric("Income received", f"{features['income_presence_rate']:.0%} of months")
-    metric_columns[1].metric("Positive surplus", f"{features['positive_surplus_rate']:.0%} of months")
-    metric_columns[2].metric("Average monthly surplus", f"₦{features['mean_monthly_surplus']:,.0f}")
-    metric_columns[3].metric("Liquidity buffer", f"{features['liquidity_buffer_months']:.1f} months")
+    metric_columns[0].metric(
+        "Salary received",
+        f"{features['income_presence_rate']:.0%} of months",
+    )
+    metric_columns[1].metric(
+        "Months with surplus",
+        f"{features['positive_surplus_rate']:.0%} of recent months",
+    )
+    metric_columns[2].metric(
+        "Average monthly surplus",
+        f"₦{features['mean_monthly_surplus']:,.0f}",
+    )
+    metric_columns[3].metric(
+        "Balance buffer",
+        f"{features['liquidity_buffer_months']:.1f} months",
+    )
 
-    action_titles = {
-        "recommend": "Suggested for review",
-        "wait": "Wait for more history",
-        "suppress": "Hold back this offer",
-    }
-    if decision["action"] == "recommend":
-        st.success(action_titles[decision["action"]])
-        for product_name in decision["products"]:
-            st.subheader(product_name)
-    elif decision["action"] == "wait":
-        st.warning(action_titles[decision["action"]])
-    else:
-        st.info(action_titles[decision["action"]])
-
-    if decision.get("probability_surplus_persists") is not None:
-        score_column, reason_column = st.columns([1, 2])
-        with score_column:
-            st.metric(
-                "Cash-flow persistence estimate",
-                f"{decision['probability_surplus_persists']:.0%}",
-                help="Model estimate for positive net cash flow in all of the next three simulated months.",
-            )
-        with reason_column:
-            st.markdown("**Why this action?**")
-            st.write(decision["reason"])
-    else:
-        st.write(decision["reason"])
-
-    st.markdown("#### Transaction history")
+    st.markdown("#### Account activity")
     st.dataframe(
-        pd.DataFrame(result["timeline"]),
+        pd.DataFrame(feature_rows(transactions, CUSTOMER["opening_balance"])),
         hide_index=True,
         width="stretch",
-        height=420,
+        height=310,
         column_config={
             "Salary credit": st.column_config.NumberColumn(format="₦%,.0f"),
             "Other credits": st.column_config.NumberColumn(format="₦%,.0f"),
@@ -180,55 +151,106 @@ def show_result(result: dict[str, Any]) -> None:
         },
     )
 
-    with st.expander("Model details"):
-        report = result["model_report"]
-        st.write(
-            f"The logistic regression was trained on {report['training_profiles']:,} "
-            f"simulated profiles and evaluated on {report['held_out_profiles']:,} held-out profiles."
-        )
-        st.write(
-            f"Held-out ROC-AUC: {report['roc_auc']:.3f} · "
-            f"majority baseline accuracy: {report['baseline_accuracy']:.3f} · "
-            f"model accuracy: {report['accuracy']:.3f}"
-        )
-        st.caption(
-            "Training outcomes are simulated cash-flow patterns.  "
-            
-        )
+    if st.button("Run CoverIQ review", type="primary", width="stretch"):
+        result = run_review(settings)
+        st.session_state["coveriq_result"] = result
+        st.rerun()
 
-    if st.button("Change consent or interests"):
-        st.session_state.pop("coveriq_result", None)
+    if st.button("Back to Chinedu's preferences"):
         st.session_state["coveriq_scene"] = "setup"
         st.rerun()
-    st.button("Restart demo", on_click=restart_demo)
 
 
-def show_review() -> None:
-    settings = st.session_state.get("coveriq_settings")
-    if not settings:
-        st.session_state["coveriq_scene"] = "setup"
-        st.rerun()
-        return
+def show_result(result: dict[str, Any]) -> None:
+    features = result["features"]
+    decision = result["decision"]
 
-    result = st.session_state.get("coveriq_result")
-    if result is None:
-        st.title("CoverIQ · Account review")
-        if st.button("Analyze Chinedu’s history", type="primary", width="stretch"):
-            result = run_review(settings)
-            st.session_state["coveriq_result"] = result
-            st.rerun()
-        if st.button("Back to consent and interests"):
+    st.title("CoverIQ · Recommendation")
+    st.caption("Chinedu · Cash-flow review and selected interests")
+
+    selected_products = decision.get("products", [])
+    if selected_products:
+        st.markdown("**Selected for consideration**")
+        st.write(" · ".join(selected_products))
+
+    score = decision.get("probability_surplus_persists")
+    score_label = "Not calculated" if score is None else f"{score:.0%}"
+    score_columns = st.columns([1, 2])
+    with score_columns[0]:
+        st.metric(
+            "Positive cash-flow estimate",
+            score_label,
+            help="Estimated chance that monthly credits exceed debits in each of the next three months.",
+        )
+    with score_columns[1]:
+        st.markdown("#### CoverIQ's action")
+        action_labels = {
+            "recommend": "Show the selected offer for review",
+            "wait": "Wait and review again later",
+            "suppress": "Hold back the offer",
+        }
+        if decision["action"] == "recommend":
+            st.success(action_labels[decision["action"]])
+        elif decision["action"] == "wait":
+            st.warning(action_labels[decision["action"]])
+        else:
+            st.info(action_labels[decision["action"]])
+        st.write(decision["reason"])
+
+    st.markdown("#### Signals behind the decision")
+    signal_columns = st.columns(4)
+    signal_columns[0].metric(
+        "Income regularity", f"{features['income_presence_rate']:.0%}"
+    )
+    signal_columns[1].metric(
+        "Positive-surplus months", f"{features['positive_surplus_rate']:.0%}"
+    )
+    signal_columns[2].metric(
+        "Average monthly surplus", f"₦{features['mean_monthly_surplus']:,.0f}"
+    )
+    signal_columns[3].metric(
+        "Recurring outflows", f"{features['obligation_to_income_ratio']:.0%} of income"
+    )
+
+    with st.expander("View the 36-month account history"):
+        st.dataframe(
+            pd.DataFrame(result["timeline"]),
+            hide_index=True,
+            width="stretch",
+            height=420,
+            column_config={
+                "Salary credit": st.column_config.NumberColumn(format="₦%,.0f"),
+                "Other credits": st.column_config.NumberColumn(format="₦%,.0f"),
+                "Debits": st.column_config.NumberColumn(format="₦%,.0f"),
+                "End balance": st.column_config.NumberColumn(format="₦%,.0f"),
+            },
+        )
+
+    buttons = st.columns(2)
+    with buttons[0]:
+        if st.button("Change preferences"):
+            st.session_state.pop("coveriq_result", None)
             st.session_state["coveriq_scene"] = "setup"
             st.rerun()
-        return
+    with buttons[1]:
+        st.button("Restart", on_click=restart_demo)
 
-    show_result(result)
+
+def show_app() -> None:
+    scene = st.session_state.get("coveriq_scene", "setup")
+    settings = st.session_state.get("coveriq_settings")
+    result = st.session_state.get("coveriq_result")
+
+    if scene == "setup":
+        show_customer_setup()
+    elif scene == "review" and settings:
+        if result is None:
+            show_review(settings)
+        else:
+            show_result(result)
+    else:
+        st.session_state["coveriq_scene"] = "setup"
+        st.rerun()
 
 
-scene = st.session_state.get("coveriq_scene", "intro")
-if scene == "setup":
-    show_setup()
-elif scene == "review":
-    show_review()
-else:
-    show_intro()
+show_app()

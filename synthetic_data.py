@@ -20,6 +20,7 @@ FEATURE_COLUMNS = [
     "income_variability",
     "recent_income_change_pct",
     "months_since_income_change",
+    "income_change_stability",
     "mean_monthly_surplus",
     "lower_quartile_surplus",
     "positive_surplus_rate",
@@ -78,7 +79,7 @@ def _customer_history(
     base_obligations_ratio = rng.uniform(0.10, 0.24)
     raise_age = rng.choice((3, 6, 9, 12))
     raise_start = HISTORY_MONTHS - raise_age
-    raise_multiplier = rng.uniform(1.3, 1.9)
+    raise_multiplier = rng.uniform(1.3, 2.1)
     raise_continues = True
     if pattern == "recent_raise":
         reversion_chance = {3: 0.35, 6: 0.22, 9: 0.10, 12: 0.04}[raise_age]

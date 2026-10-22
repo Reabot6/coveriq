@@ -122,6 +122,10 @@ def calculate_features(
         "income_variability": income_mad / typical_income if typical_income else 1.0,
         "recent_income_change_pct": income_change,
         "months_since_income_change": float(months_at_higher_level),
+        "income_change_stability": (
+            max(0.0, min(1.0, months_at_higher_level / 12.0))
+            * max(0.0, min(2.0, income_change))
+        ),
         "mean_monthly_surplus": sum(recent_surplus) / len(recent_surplus),
         "lower_quartile_surplus": float(pd.Series(recent_surplus).quantile(0.25)),
         "positive_surplus_rate": sum(value > 0 for value in recent_surplus) / len(recent_surplus),

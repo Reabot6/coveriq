@@ -1,4 +1,4 @@
-"""Small Prudential Zenith Life catalogue used by the original demo scene."""
+"""Small Prudential Zenith Life catalogue used in the CoverIQ demo."""
 
 PRODUCTS = {
     "my_smart_save": {
