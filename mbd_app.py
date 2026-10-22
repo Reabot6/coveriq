@@ -126,7 +126,7 @@ def main() -> None:
                         "Active months (of 12)": safe_count(profile.get("active_months", 0)),
                         "Decision": "Recommend for review" if candidates else "Hold back",
                         "Top-ranked label": top_match["product"].replace("_", " ").title(),
-                "Model score": top_match["propensity_score"],
+                        "Model score": top_match["model_score"],
                         "Observed next-month outcome": (
                             "Purchased" if top_match["observed_next_month_purchase"] else "Not purchased"
                         ),
@@ -149,7 +149,7 @@ def main() -> None:
                 hide_index=True,
                 width="stretch",
                 column_config={
-                    "Model score": st.column_config.NumberColumn(format="percent"),
+                    "Model score": st.column_config.NumberColumn(format="%.3f"),
                 },
             )
             st.caption("The recorded next-month outcome is shown for benchmark comparison after scoring.")
@@ -164,7 +164,7 @@ def main() -> None:
                         [
                             {
                                 "Product label": item["product"].replace("_", " ").title(),
-                                "Model score": item["propensity_score"],
+                                "Model score": item["model_score"],
                                 "Training baseline": item["training_prevalence"],
                                 "Decision": (
                                     "Above baseline"
@@ -183,7 +183,7 @@ def main() -> None:
                         hide_index=True,
                         width="stretch",
                         column_config={
-                            "Model score": st.column_config.NumberColumn(format="percent"),
+                            "Model score": st.column_config.NumberColumn(format="%.3f"),
                             "Training baseline": st.column_config.NumberColumn(format="percent"),
                         },
                     )
@@ -219,7 +219,7 @@ def main() -> None:
                             "ranked_products": [
                                 {
                                     "product_id": item["product"],
-                                    "model_score": round(item["propensity_score"], 6),
+                                    "model_score": round(item["model_score"], 6),
                                     "training_baseline": round(item["training_prevalence"], 6),
                                     "above_training_baseline": item["above_training_baseline"],
                                     "selected_for_review": bool(

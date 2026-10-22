@@ -452,13 +452,13 @@ def rank_profile(bundle: dict, profile: pd.Series | dict) -> list[dict]:
         results.append(
             {
                 "product": target,
-                "propensity_score": score,
+                "model_score": score,
                 "training_prevalence": baseline,
                 "above_training_baseline": score > baseline,
                 "observed_next_month_purchase": int(profile[target]),
             }
         )
-    return sorted(results, key=lambda result: result["propensity_score"], reverse=True)
+    return sorted(results, key=lambda result: result["model_score"], reverse=True)
 
 
 def explain_profile(bundle: dict, profile: pd.Series | dict, product: str) -> list[dict]:

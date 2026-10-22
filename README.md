@@ -1,6 +1,9 @@
 # CoverIQ
 
-CoverIQ is an intelligent product-matching layer for banks. It turns permitted transaction patterns into ranked product candidates. This demo trains on the open, anonymized MBD-mini dataset. i  was building specified based layer before  which was faulty but i found a model to use  and build on
+CoverIQ is an intelligent product-matching layer for banks. It turns permitted transaction patterns into ranked product candidates. This version trains on the open, anonymized MBD-mini dataset. The earlier prototype used assumed outcomes; this build uses the dataset's recorded transaction and product-purchase examples instead.
+
+For a plain-language walkthrough of the demo screen, metrics, and current limits, see [DEMO_GUIDE.md](DEMO_GUIDE.md).
+For the pitch sections in the facilitator's photo, see [POWERPOINT_POINTS.md](POWERPOINT_POINTS.md).
 
 ## Run the demo
 

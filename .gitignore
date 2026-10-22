@@ -30,6 +30,9 @@ dist/
 data/
 models/
 
+# Private working notes
+DEMO_GUIDE.md
+
 # Operating system files
 .DS_Store
 Thumbs.db
