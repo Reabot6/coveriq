@@ -26,6 +26,10 @@ build/
 dist/
 *.egg-info/
 
+# Downloaded datasets and local model artifacts
+data/
+models/
+
 # Operating system files
 .DS_Store
 Thumbs.db
