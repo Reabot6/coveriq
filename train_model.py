@@ -1,4 +1,4 @@
-"""Train and evaluate CoverIQ's simulated cash-flow persistence model."""
+"""Train and evaluate the simulated premium-affordability model."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def train_model(sample_count: int = 2400, seed: int = 42):
             y_true,
             predictions,
             labels=[0, 1],
-            target_names=["not_persistent", "persistent"],
+            target_names=["reserve_not_maintained", "reserve_maintained"],
             output_dict=True,
             zero_division=0,
         ),
@@ -86,7 +86,7 @@ def train_model(sample_count: int = 2400, seed: int = 42):
 
 if __name__ == "__main__":
     _, evaluation = train_model()
-    print("CoverIQ cash-flow persistence model · simulated data")
+    print("CoverIQ premium affordability model · simulated data")
     print(f"Training profiles: {evaluation['training_profiles']:,}")
     print(f"Held-out profiles: {evaluation['held_out_profiles']:,}")
     print(f"Baseline accuracy: {evaluation['baseline_accuracy']:.3f}")

@@ -1,4 +1,4 @@
-"""Generate fictional transaction histories and labels from later outcomes."""
+"""Generate transaction histories and premium-sustainability training labels."""
 
 from __future__ import annotations
 
@@ -9,19 +9,21 @@ from typing import Any
 
 import pandas as pd
 
+from affordability import add_premium_features, premium_schedule
 from features import calculate_features
 
 
 HISTORY_MONTHS = 36
-FORECAST_MONTHS = 3
-LABEL_COLUMN = "positive_surplus_next_3_months"
+FORECAST_MONTHS = 12
+LABEL_COLUMN = "premium_sustainable_next_12_months"
 FEATURE_COLUMNS = [
     "income_presence_rate",
     "income_variability",
-    "recent_income_change_pct",
-    "months_since_income_change",
-    "income_change_stability",
+    "typical_monthly_income",
+    "current_balance",
+    "typical_monthly_recurring_outflow",
     "mean_monthly_surplus",
+    "baseline_monthly_surplus",
     "lower_quartile_surplus",
     "positive_surplus_rate",
     "surplus_variability",
@@ -31,11 +33,14 @@ FEATURE_COLUMNS = [
     "debit_count_per_month",
     "early_month_outflow_share",
     "history_months",
+    "premium_to_income_ratio",
+    "premium_payment_to_balance_ratio",
+    "annual_payment",
 ]
 
 PATTERNS = {
     # Weight, spend ratio, shock chance, historical missed-pay chance,
-    # and future missed-pay chance. These are simulator assumptions, not bank data.
+    # and future missed-pay chance. These are simulator assumptions.
     "steady": (0.30, 0.68, 0.05, 0.01, 0.04),
     "recent_raise": (0.23, 0.66, 0.06, 0.02, 0.08),
     "gradual_growth": (0.18, 0.74, 0.07, 0.03, 0.08),
@@ -68,9 +73,9 @@ def _transaction(
 
 
 def _customer_history(
-    customer_id: int,
     rng: random.Random,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], list[float]]:
+    """Return observed transactions and the following year's net cash flows."""
     pattern = rng.choices(
         list(PATTERNS), weights=[values[0] for values in PATTERNS.values()]
     )[0]
@@ -86,7 +91,7 @@ def _customer_history(
         raise_continues = rng.random() >= reversion_chance
 
     transactions: list[dict[str, Any]] = []
-    future_surpluses: list[float] = []
+    future_net_flows: list[float] = []
 
     for month_index in range(HISTORY_MONTHS + FORECAST_MONTHS):
         year, month, _ = _month_for(month_index)
@@ -109,7 +114,6 @@ def _customer_history(
         gap_chance = future_gap_chance if is_future else past_gap_chance
         missed_income = rng.random() < gap_chance
         income = 0.0 if missed_income else max(0.0, income_level)
-
         total_outflow = max(
             60_000,
             income_level * rng.uniform(spend_ratio - 0.12, spend_ratio + 0.12)
@@ -132,12 +136,11 @@ def _customer_history(
         food = variable_outflow * rng.uniform(0.38, 0.52)
         transport = variable_outflow * rng.uniform(0.14, 0.24)
         other = max(0.0, variable_outflow - food - transport)
-
-        month_surplus = income - total_outflow
         transfer = rng.uniform(5_000, 40_000) if rng.random() < 0.25 else 0.0
-        month_surplus -= transfer
+        net_flow = income - total_outflow - transfer
+
         if is_future:
-            future_surpluses.append(month_surplus)
+            future_net_flows.append(net_flow)
             continue
 
         if income:
@@ -178,25 +181,50 @@ def _customer_history(
                 _transaction(year, month, 28, "debit", "savings_transfer", transfer)
             )
 
-    label = int(all(surplus > 0 for surplus in future_surpluses))
-    return transactions, label
+    return transactions, future_net_flows
 
 
-def create_training_data(n_samples: int = 2400, seed: int = 42) -> pd.DataFrame:
-    """Create one feature row per history; label it from its next 3 months."""
+def create_training_data(n_samples: int = 3000, seed: int = 42) -> pd.DataFrame:
+    """Create one profile/premium example per row and label from future balances."""
     rng = random.Random(seed)
     rows = []
     for customer_id in range(n_samples):
-        transactions, label = _customer_history(customer_id, rng)
+        transactions, future_net_flows = _customer_history(rng)
         opening_balance = rng.uniform(100_000, 1_500_000)
-        features = calculate_features(
+        financial_features = calculate_features(
             transactions,
             opening_balance=opening_balance,
         )
+
+        monthly_premium = financial_features["typical_monthly_income"] * rng.choice(
+            (0.02, 0.04, 0.07, 0.10, 0.15, 0.22, 0.30)
+        )
+        frequency = rng.choice(("monthly", "annual"))
+        premium_amount = monthly_premium if frequency == "monthly" else monthly_premium * 12
+        model_features = add_premium_features(
+            financial_features,
+            premium_amount,
+            frequency,
+        )
+
+        projected_balance = financial_features["current_balance"]
+        reserve_floor = financial_features["typical_monthly_recurring_outflow"]
+        payment_schedule = premium_schedule(premium_amount, frequency)
+        # A premium is sustainable in this scenario only if one month's typical
+        # recurring commitments remain available throughout the forecast year.
+        projected_balances = []
+        projected_balance = financial_features["current_balance"]
+        for cash_flow, payment in zip(future_net_flows, payment_schedule):
+            projected_balance += cash_flow - payment
+            projected_balances.append(projected_balance)
+        label = int(all(balance >= reserve_floor for balance in projected_balances))
+
         rows.append(
             {
                 "customer_id": customer_id,
-                **{name: features[name] for name in FEATURE_COLUMNS},
+                **{name: model_features[name] for name in FEATURE_COLUMNS},
+                "premium_amount": round(premium_amount, 2),
+                "payment_frequency": frequency,
                 LABEL_COLUMN: label,
             }
         )

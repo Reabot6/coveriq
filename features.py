@@ -21,11 +21,9 @@ RECURRING_OUTFLOW_CATEGORIES = {
 
 def calculate_features(
     transactions: list[dict[str, Any]],
-    stated_goal: str | None = None,
     opening_balance: float = 0.0,
 ) -> dict[str, float]:
-    """Summarize transaction patterns; product interest stays outside the model."""
-    del stated_goal  # A declared goal is a matching input, not a cash-flow feature.
+    """Summarize transaction patterns for the cash-flow model."""
     if not transactions:
         raise ValueError("At least one transaction is required")
 
@@ -35,7 +33,6 @@ def calculate_features(
             "credits": 0.0,
             "debits": 0.0,
             "recurring_outflows": 0.0,
-            "credit_count": 0.0,
             "debit_count": 0.0,
             "early_month_debits": 0.0,
         }
@@ -51,7 +48,6 @@ def calculate_features(
 
         if direction == "credit":
             monthly[month]["credits"] += amount
-            monthly[month]["credit_count"] += 1
             net_flow_by_month[month] += amount
             if category in {"salary", "wages", "employment_income"}:
                 monthly[month]["income"] += amount
@@ -110,16 +106,26 @@ def calculate_features(
 
     surplus = [net_flow_by_month[month] for month in months]
     recent_surplus = surplus[-window_size:]
+    stable_income_months = min(months_at_higher_level, len(surplus) - 1)
+    baseline_end = len(surplus) - stable_income_months if stable_income_months else max(1, len(surplus) - window_size)
+    baseline_start = max(0, baseline_end - 12)
+    baseline_surplus = surplus[baseline_start:baseline_end]
     typical_outflow = median(
         [monthly[month]["debits"] for month in months[-6:]]
     )
     typical_balance = median(ending_balances[-6:])
     earlier_balance = median(ending_balances[-12:-6]) if len(months) >= 12 else 0.0
     later_balance = median(ending_balances[-6:])
+    recent_recurring_outflows = [
+        monthly[month]["recurring_outflows"] for month in months[-window_size:]
+    ]
 
     features = {
         "income_presence_rate": sum(income > 0 for income in recent_incomes) / window_size,
         "income_variability": income_mad / typical_income if typical_income else 1.0,
+        "typical_monthly_income": typical_income,
+        "current_balance": ending_balances[-1],
+        "typical_monthly_recurring_outflow": median(recent_recurring_outflows),
         "recent_income_change_pct": income_change,
         "months_since_income_change": float(months_at_higher_level),
         "income_change_stability": (
@@ -127,6 +133,7 @@ def calculate_features(
             * max(0.0, min(2.0, income_change))
         ),
         "mean_monthly_surplus": sum(recent_surplus) / len(recent_surplus),
+        "baseline_monthly_surplus": median(baseline_surplus) if baseline_surplus else 0.0,
         "lower_quartile_surplus": float(pd.Series(recent_surplus).quantile(0.25)),
         "positive_surplus_rate": sum(value > 0 for value in recent_surplus) / len(recent_surplus),
         "surplus_variability": pstdev(recent_surplus) / max(typical_income, 1.0),

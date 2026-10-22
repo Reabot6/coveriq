@@ -1,98 +1,109 @@
-"""Apply consent and timing safeguards to the synthetic cash-flow estimate."""
+"""Combine catalogue retrieval and premium sustainability scores."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from products import GOAL_LABELS, PRODUCTS
+from affordability import add_premium_features
+from catalogue import retrieve_offers
+from products import PRODUCTS
 from synthetic_data import FEATURE_COLUMNS
 
-MIN_SURPLUS_PERSISTENCE_ESTIMATE = 0.55
+MIN_SUSTAINABILITY_ESTIMATE = 0.60
 MIN_MONTHS_AT_NEW_INCOME_LEVEL = 6
 
 
-def recommend(
-    features: dict[str, float],
+def recommend_catalogue(
+    financial_features: dict[str, float],
+    premiums: dict[str, float],
+    payment_frequency: str,
     model,
     consent: bool,
-    preferred_goals: list[str] | None = None,
-) -> dict:
-    """Return recommend, wait, or suppress with traceable reasons."""
-    if not consent:
-        return {
-            "action": "suppress",
-            "message": "No analysis or offer is produced without the demo opt-in.",
-            "probability_surplus_persists": None,
-            "products": [],
-            "reason": "Consent was not provided.",
-        }
+    selected_interests: list[str] | None = None,
+) -> list[dict]:
+    """Score every catalogue item and rank requested offers by fit and affordability."""
+    if not consent or not selected_interests:
+        return []
 
-    if not preferred_goals:
-        return {
-            "action": "suppress",
-            "message": "No offer is produced because the customer selected no products.",
-            "probability_surplus_persists": None,
-            "products": [],
-            "reason": "The customer did not ask to consider a product.",
-        }
-
-    goal_by_label = {label: goal for goal, label in GOAL_LABELS.items()}
-    selected_goals = [
-        goal_by_label[label]
-        for label in preferred_goals
-        if label in goal_by_label
+    retrieved = [
+        offer for offer in retrieve_offers(selected_interests)
+        if offer["selected"]
     ]
-    selected_products = [
-        product for product in PRODUCTS.values() if product["goal"] in selected_goals
-    ]
-    if not selected_products:
-        raise ValueError("Choose at least one customer goal from the demo catalogue")
+    ranked = []
+    for offer in retrieved:
+        product_key = offer["key"]
+        model_features = add_premium_features(
+            financial_features, premiums[product_key], payment_frequency
+        )
+        model_input = pd.DataFrame(
+            [[model_features[column] for column in FEATURE_COLUMNS]],
+            columns=FEATURE_COLUMNS,
+        )
+        positive_class = list(model.classes_).index(1)
+        probability = float(model.predict_proba(model_input)[0][positive_class])
+        monthly_premium = premiums[product_key] / 12 if payment_frequency == "annual" else premiums[product_key]
+        baseline_surplus = financial_features["baseline_monthly_surplus"]
+        relies_on_new_income = (
+            monthly_premium > max(baseline_surplus, 0)
+            and financial_features["recent_income_change_pct"] >= 0.25
+        )
 
-    model_input = pd.DataFrame(
-        [[features[column] for column in FEATURE_COLUMNS]],
-        columns=FEATURE_COLUMNS,
+        if financial_features["mean_monthly_surplus"] <= 0:
+            action = "hold"
+            reason = "Recent outflows use all observed credits, leaving no average monthly surplus."
+        elif (
+            relies_on_new_income
+            and financial_features["months_since_income_change"] < MIN_MONTHS_AT_NEW_INCOME_LEVEL
+        ):
+            action = "wait"
+            reason = (
+                f"This ₦{monthly_premium:,.0f}/month premium is above the prior-income surplus "
+                f"of ₦{baseline_surplus:,.0f}/month, so it relies on the recent raise. "
+                f"Recent money left is ₦{financial_features['mean_monthly_surplus']:,.0f}/month, "
+                f"but the higher salary has appeared for only "
+                f"{int(financial_features['months_since_income_change'])} months."
+            )
+        elif probability < MIN_SUSTAINABILITY_ESTIMATE:
+            action = "wait"
+            reason = (
+                f"The premium is ₦{monthly_premium:,.0f}/month and recent money left after "
+                f"spending is ₦{financial_features['mean_monthly_surplus']:,.0f}/month. "
+                f"The model estimates a {probability:.0%} chance of maintaining a one-month "
+                "recurring-bills reserve for the next year."
+            )
+        else:
+            action = "recommend"
+            reason = (
+                f"The premium is ₦{monthly_premium:,.0f}/month against an observed monthly "
+                f"surplus of ₦{financial_features['mean_monthly_surplus']:,.0f}; "
+                f"the model estimates {probability:.0%} sustainability."
+            )
+
+        # The customer-interest retrieval and financial estimate both affect rank.
+        combined_score = 0.45 * offer["relevance_score"] + 0.55 * probability
+        ranked.append({
+            **offer,
+            "action": action,
+            "probability_sustainable": probability,
+            "premium_amount": premiums[product_key],
+            "payment_frequency": payment_frequency,
+            "monthly_premium": monthly_premium,
+            "baseline_monthly_surplus": baseline_surplus,
+            "relies_on_new_income": relies_on_new_income,
+            "reason": reason,
+            "combined_score": combined_score,
+        })
+
+    actionable = [offer for offer in ranked if offer["action"] == "recommend"]
+    if actionable:
+        best = max(actionable, key=lambda offer: offer["combined_score"])
+        best["action"] = "top_match"
+        best["reason"] = "Top catalogue match. " + best["reason"]
+        for offer in actionable:
+            if offer is not best:
+                offer["action"] = "also_fits"
+    action_order = {"top_match": 0, "also_fits": 1, "wait": 2, "hold": 3}
+    return sorted(
+        ranked,
+        key=lambda offer: (action_order[offer["action"]], -offer["combined_score"]),
     )
-    positive_class_index = list(model.classes_).index(1)
-    probability = float(model.predict_proba(model_input)[0][positive_class_index])
-
-    if features["mean_monthly_surplus"] <= 0:
-        action = "suppress"
-        reason = "Recent monthly outflows meet or exceed account credits, so CoverIQ holds back the offer."
-    elif (
-        features["recent_income_change_pct"] >= 0.25
-        and features["months_since_income_change"] < MIN_MONTHS_AT_NEW_INCOME_LEVEL
-    ):
-        action = "wait"
-        months = int(features["months_since_income_change"])
-        reason = (
-            f"Income is {features['recent_income_change_pct']:.0%} above its earlier level, "
-            f"but has held there for only {months} months. CoverIQ is waiting for more history."
-        )
-    elif probability < MIN_SURPLUS_PERSISTENCE_ESTIMATE:
-        action = "wait"
-        reason = (
-            f"The model estimates a {probability:.0%} chance of positive cash flow in each "
-            f"of the next three months, below the {MIN_SURPLUS_PERSISTENCE_ESTIMATE:.0%} "
-            "review threshold."
-        )
-    else:
-        action = "recommend"
-        reason = (
-            f"Income has held at the higher level for "
-            f"{int(features['months_since_income_change'])} months, and the model estimates "
-            f"a {probability:.0%} chance of positive cash flow in each of the next three months."
-        )
-
-    return {
-        "action": action,
-        "message": {
-            "recommend": "Show product information for the customer to review.",
-            "wait": "Wait for more evidence, then review again.",
-            "suppress": "Do not show an offer in this scenario.",
-        }[action],
-        "probability_surplus_persists": probability,
-        "products": [product["name"] for product in selected_products],
-        "matched_goals": [GOAL_LABELS[goal] for goal in selected_goals],
-        "reason": reason,
-        "model_target": "Positive net cash flow in each of the next three simulated months",
-    }
